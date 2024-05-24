@@ -6,7 +6,7 @@ namespace EBook.Services.Iface
     {
         Task<string> SignupAsync(UserDTO loginService);
         Task<string> RoleAsync(UserDTO loginService);
-        string GenerateToken(UserDTO login, string role);
+        Task<string>  GenerateToken(UserDTO login, string role);
 
     }
 }
