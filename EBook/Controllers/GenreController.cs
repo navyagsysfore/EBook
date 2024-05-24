@@ -1,5 +1,6 @@
 ﻿using EBook.Context;
 using EBook.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 
@@ -7,6 +8,7 @@ namespace EBook.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class GenreController : ControllerBase
     {
         private readonly JwtContext _context;
@@ -16,6 +18,7 @@ namespace EBook.Controllers
             _context = context;
         }
 
+        [Authorize(Roles = "Admin, User")]
         [HttpPost("AddGenre")]
         public async Task<ActionResult> AddGenre([FromBody] GenereDTO genreDTO)
         {
