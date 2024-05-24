@@ -9,12 +9,12 @@ namespace EBook.Programcsmetods
 {
     public static class JWTMethod
     {
-        public static void AddAuthentication(this IServiceCollection services, IConfiguration configuration)
+        public static void AddCustomAuthentication(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddAuthentication(options => {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+                
             }).AddJwtBearer(options => {
                 options.RequireHttpsMetadata = true;
                 options.SaveToken = true;
@@ -30,6 +30,11 @@ namespace EBook.Programcsmetods
                     ValidIssuer = configuration["Jwt:Issuer"],
                     ValidAudience = configuration["Jwt:Audience"]
                 };
+            });
+
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
             });
         }
     }
