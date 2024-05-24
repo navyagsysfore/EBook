@@ -6,6 +6,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using EBook.Service;
 using EBook.Services.Interf;
+using EBook.Services.Iface;
+using EBook.Services.JWTDetails;
 
 
 
@@ -13,17 +15,23 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+
+builder.Services.Configure<JWTClaimsDetails>(builder.Configuration.GetSection("Jwt"));
+
 builder.Services.AddDbContext<JwtContext>(Options =>
   Options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddScoped<IBookService, DataBaseManager>();
-builder.Services.AddScoped<IAuthorService, AuthorDataBaseM>();
+
+builder.Services.AddSingleton<ILoginService, Login>();
+builder.Services.AddSingleton<IBookService, DataBaseManager>();
+builder.Services.AddSingleton<IAuthorService, AuthorDataBaseM>();
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddAuthentication(builder.Configuration);
+builder.Services.AddCustomAuthentication(builder.Configuration);
+builder.Services.SwaggerAuthorization();
 
 var app = builder.Build();
 
