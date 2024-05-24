@@ -25,6 +25,7 @@ namespace EBook.Context
             modelBuilder.Entity<Genre>().HasKey(g => g.GenreID);
             modelBuilder.Entity<Users>().HasKey(u => u.Username);
 
+            modelBuilder.Entity<Users>().Property(u => u.Role).HasColumnName("Role");
             modelBuilder.Entity<Genre>()
                 .Property(g => g.GenreID)
                 .ValueGeneratedOnAdd();
