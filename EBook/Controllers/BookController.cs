@@ -15,23 +15,25 @@ namespace EBook.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-   
+    [Authorize]
 
 
     public class BookController : ControllerBase
     {
         private readonly IBookService _bookService;
         private readonly IAuthorService _authorService;
-        //private readonly ILoginService _loginService;
+        private readonly ILoginService _loginService;
+        private readonly JwtContext _context;
 
-        public BookController(IBookService bookService, IAuthorService authorService)
+        public BookController(IBookService bookService, IAuthorService authorService, ILoginService loginService, JwtContext context)
         {
             _bookService = bookService;
             _authorService = authorService;
-            // _loginService = loginService;
+            _loginService = loginService;
+            _context = context;
         }
 
-        //[Authorize(Roles = "Admin, User")]
+        [Authorize(Roles = "Admin, User")]
         [HttpGet]
         [Route("GetAllBooks")]
         public async Task<ActionResult> GetAllBooks()
@@ -39,7 +41,7 @@ namespace EBook.Controllers
             return Ok(await _bookService.GetAllBooksAsync());
         }
 
-      //  [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         [Route("AddBook")]
         public async Task<ActionResult> AddBook([FromBody] BookDTO book)
@@ -60,7 +62,7 @@ namespace EBook.Controllers
             }
         }
 
-       // [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpDelete]
         [Route("DeleteBook/{id}")]
         public async Task<ActionResult> DeleteBook(Guid id)
@@ -76,7 +78,7 @@ namespace EBook.Controllers
             }
         }
 
-        // [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPatch]
         [Route("UpdateBook/{id}")]
         public async Task<ActionResult> UpdateBook(Guid id, [FromBody] UpdateBook updateBookDTO)
@@ -98,7 +100,7 @@ namespace EBook.Controllers
         }
 
 
-        // [Authorize(Roles = "Admin, User")]
+        [Authorize(Roles = "Admin, User")]
         [HttpGet]
         [Route("GetAllAuthors")]
         public async Task<ActionResult> GetAllAuthors()
@@ -106,7 +108,7 @@ namespace EBook.Controllers
             return Ok(await _authorService.GetAllAuthorsAsync());
         }
 
-        //[Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         [Route("AddAuthor")]
         public async Task<ActionResult> AddAuthor([FromBody] AuthorDTO author)
@@ -127,7 +129,7 @@ namespace EBook.Controllers
             }
         }
 
-       // [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpDelete]
         [Route("DeleteAuthor/{id}")]
         public async Task<ActionResult> DeleteAuthor(Guid id)
@@ -143,7 +145,7 @@ namespace EBook.Controllers
             }
         }
 
-       // [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         [HttpPatch]
         [Route("UpdateAuthor/{id}")]
         public async Task<ActionResult> UpdateAuthor(Guid id, [FromBody] UpdateAuthor updateauthor)
@@ -164,7 +166,7 @@ namespace EBook.Controllers
             }
         }
 
-       // [Authorize(Roles = "Admin, User")]
+        [Authorize(Roles = "Admin, User")]
         [HttpGet]
         [Route("SearchBooksByTitle")]
         public async Task<ActionResult> SearchBooksByTitle(string title)
@@ -172,7 +174,7 @@ namespace EBook.Controllers
             return Ok(await _bookService.SearchBooksByTitleAsync(title));
         }
 
-      //  [Authorize(Roles = "Admin, User")]
+        [Authorize(Roles = "Admin, User")]
         [HttpGet]
         [Route("GetBooksByGenre/{genreID}")]
         public async Task<ActionResult> GetBooksByGenre(int genreID)
@@ -180,7 +182,7 @@ namespace EBook.Controllers
             return Ok(await _bookService.GetBooksByGenreAsync(genreID));
         }
 
-     //   [Authorize(Roles = "Admin, User")]
+        [Authorize(Roles = "Admin, User")]
         [HttpGet]
         [Route("GetBooksByAuthor/{authorID}")]
         public async Task<ActionResult> GetBooksByAuthor(Guid authorID)
@@ -189,58 +191,75 @@ namespace EBook.Controllers
         }
 
 
-        /* [HttpPost]
-         [Route("Signup")]
-         public async Task<ActionResult> Signup(UserDTO login)
-         {
-             if (!ModelState.IsValid)
-             {
-                 return BadRequest(ModelState);
-             }
+        [HttpPost]
+        [Route("Signup")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Signup([FromBody] UserDTO userSignup)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-             try
-             {
-                 var signupResult = await _loginService.SignupAsync(login);
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == userSignup.Username);
+            if (existingUser != null)
+            {
+                return Conflict("Username already exists");
+            }
 
-                 if (signupResult == "Success")
-                 {
-                     return Ok("User registered successfully");
-                 }
-                 else
-                 {
-                     return BadRequest(signupResult);
-                 }
-             }
-             catch (Exception ex)
-             {
-                 return StatusCode(500, "An error occurred while processing your request.");
-             }
-         }
+            try
+            {
+                string passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(userSignup.Password, 12);
 
-         [HttpPost]
-         [Route("Validate")]
-         public async Task<IActionResult> GenerateToken(UserDTO login)
-         {
-             if (!ModelState.IsValid)
-             {
-                 return BadRequest(ModelState);
-             }
+                var newUser = new Users
+                {
 
-             try
-             {
-                 var role = await _loginService.RoleAsync(login);
-                 var jwtToken = _loginService.GenerateToken(login, role);
-                 if (jwtToken == "Invalid username or password")
-                 {
-                     return BadRequest(jwtToken);
-                 }
-                 return Ok(jwtToken);
-             }
-             catch (Exception ex)
-             {
-                 return BadRequest("An error occurred during login");
-             }
-         }
-     }*/
+                    Username = userSignup.Username,
+                    Password = passwordHash,
+                    Role = Roles.User.ToString()
+                };
+
+                _context.Users.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                return Ok("User registered successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return StatusCode(500, "An error occurred while processing your request.");
+            }
+        }
+
+
+        [HttpPost]
+        [Route("Validate")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GenerateToken([FromBody] UserDTO login)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var role = await _loginService.RoleAsync(login);
+                if (string.IsNullOrEmpty(role))
+                {
+                    return Unauthorized("Invalid username or password");
+                }
+
+                var jwtToken = await _loginService.GenerateToken(login, role);
+
+                return Ok(jwtToken);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return BadRequest("An error occurred during login");
+            }
+        }
+
     }
 }
