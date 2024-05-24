@@ -1,7 +1,8 @@
-﻿using EBook.Models;
+﻿using EBook.Context;
+using EBook.Models;
 using EBook.Services.Interface;
-using EBook.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,134 +12,168 @@ namespace EBook.Service
 {
     public class DataBaseManager : IBookService
     {
-        private readonly JwtContext _context;
+        private readonly IServiceProvider _serviceProvider;
 
-        public DataBaseManager(JwtContext context)
+        public DataBaseManager(IServiceProvider serviceProvider)
         {
-            _context = context;
-        }
-
-        public List<Book> GetAllBook()
-        {
-            return _context.Books.ToList();
+            _serviceProvider = serviceProvider;
         }
 
         public async Task<string> AddBookAsync(BookDTO book)
         {
             try
             {
-                var newBook = new Book(book);
-
-               
-                Console.WriteLine("GenreID received in AddBookAsync: " + book.GenreID);
-
-               
-                var genreExists = await _context.Genres.AnyAsync(g => g.GenreID == book.GenreID);
-                if (!genreExists)
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    
-                    Console.WriteLine("Genre does not exist");
-                    return "Genre does not exist";
-                }
+                    var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
 
-                _context.Books.Add(newBook);
+                    var newBook = new Book(book);
 
-                foreach (var authorId in book.ID)
-                {
-                    var author = await _context.Authors.FindAsync(authorId);
-                    if (author != null)
+                    Console.WriteLine("GenreID received in AddBookAsync: " + book.GenreID);
+
+                    var genreExists = await _context.Genres.AnyAsync(genre => genre.GenreID == book.GenreID);
+                    if (!genreExists)
                     {
-                        var bookAuthor = new AuthorBookMappings
-                        {
-                            Book = newBook,
-                            Author = author
-                        };
-
-                        _context.AuthorBookMappings.Add(bookAuthor);
+                        Console.WriteLine("Genre does not exist");
+                        return "Genre does not exist";
                     }
-                }
 
-                await _context.SaveChangesAsync();
-                return "Book added successfully";
+                    _context.Books.Add(newBook);
+
+                    foreach (var authorId in book.ID)
+                    {
+                        var author = await _context.Authors.FindAsync(authorId);
+                        if (author != null)
+                        {
+                            var bookAuthor = new AuthorBookMappings
+                            {
+                                Book = newBook,
+                                Author = author
+                            };
+
+                            _context.AuthorBookMappings.Add(bookAuthor);
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    return "Book added successfully";
+                }
             }
             catch (Exception ex)
             {
-                
                 Console.WriteLine("Exception occurred in AddBookAsync: " + ex.Message);
                 return "Book Add Unsuccessful";
             }
         }
 
-
-
         public async Task<string> UpdateBookAsync(Guid id, UpdateBook updateBook)
         {
             try
             {
-                var existingBook = await _context.Books.FirstOrDefaultAsync(b => b.BookID == id);
-
-                if (existingBook == null)
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    return "Book not found";
+                    var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+
+                    var existingBook = await _context.Books.FirstOrDefaultAsync(book => book.BookID == id);
+
+                    if (existingBook == null)
+                    {
+                        return "Book not found";
+                    }
+
+                    existingBook.Title = updateBook.Title;
+                    existingBook.Description = updateBook.Description;
+                    existingBook.ISBN = updateBook.ISBN;
+                    existingBook.PublicationDate = updateBook.PublicationDate;
+                    existingBook.Price = updateBook.Price;
+                    existingBook.Language = updateBook.Language;
+                    existingBook.Publisher = updateBook.Publisher;
+                    existingBook.PageCount = updateBook.PageCount;
+                    existingBook.AverageRating = updateBook.AverageRating;
+                    existingBook.GenreID = updateBook.GenreID;
+                    existingBook.Updated_At = DateTime.Now;
+
+                    await _context.SaveChangesAsync();
+
+                    return "Book update successful";
                 }
-
-                existingBook.Title = updateBook.Title;
-                existingBook.Description = updateBook.Description;
-                existingBook.ISBN = updateBook.ISBN;
-                existingBook.PublicationDate = updateBook.PublicationDate;
-                existingBook.Price = updateBook.Price;
-                existingBook.Language = updateBook.Language;
-                existingBook.Publisher = updateBook.Publisher;
-                existingBook.PageCount = updateBook.PageCount;
-                existingBook.AverageRating = updateBook.AverageRating;
-               // existingBook.TotalRating = updateBook.TotalRating;
-                existingBook.GenreID = updateBook.GenreID;
-                existingBook.Updated_At = DateTime.Now;
-
-                await _context.SaveChangesAsync();
-
-                return "Book update successful";
             }
             catch (Exception ex)
             {
                 return ex.Message;
             }
         }
-    
 
-    public async Task<string> DeleteBookAsync(Guid id)
+        public async Task<string> DeleteBookAsync(Guid id)
         {
-            var book = await _context.Books.FindAsync(id);
-            if (book == null)
-                return "Book Not found";
+            try
+            {
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
 
-            _context.Books.Remove(book);
-            await _context.SaveChangesAsync();
+                    var book = await _context.Books.FindAsync(id);
+                    if (book == null)
+                        return "Book Not found";
 
-            return "Book Delete success";
+                    _context.Books.Remove(book);
+                    await _context.SaveChangesAsync();
+
+                    return "Book Delete success";
+                }
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
         }
 
-        public async Task<List<Book>> GetAllBooksAsync() 
+        public async Task<List<Book>> GetAllBooksAsync()
         {
-            return await _context.Books.ToListAsync();
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                return await _context.Books.ToListAsync();
+            }
         }
 
         public async Task<List<Book>> SearchBooksByTitleAsync(string title)
         {
-            return await _context.Books.Where(b => b.Title.Contains(title)).ToListAsync();
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                return await _context.Books.Where(book => book.Title.Contains(title)).ToListAsync();
+            }
         }
 
         public async Task<List<Book>> GetBooksByGenreAsync(int genreId)
         {
-            return await _context.Books.Where(b => b.GenreID == genreId).ToListAsync();
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                return await _context.Books.Where(book => book.GenreID == genreId).ToListAsync();
+            }
         }
 
         public async Task<List<Book>> GetBooksByAuthorAsync(Guid authorId)
         {
-            return await _context.AuthorBookMappings
-                           .Where(ab => ab.AuthorID == authorId)
-                           .Select(ab => ab.Book)
-                           .ToListAsync();
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                return await _context.AuthorBookMappings
+                               .Where(authorbook => authorbook.AuthorID == authorId)
+                               .Select(authorbook => authorbook.Book)
+                               .ToListAsync();
+            }
+        }
+
+        public List<Book> GetAllBook()
+        {
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var _context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                return _context.Books.ToList();
+            }
         }
     }
 }

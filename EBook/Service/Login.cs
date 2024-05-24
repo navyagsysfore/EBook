@@ -12,19 +12,24 @@ using System.Text;
 using System.Threading.Tasks;
 using EBook.Services.Iface;
 using EBook.Services.JWTDetails;
+using Microsoft.Extensions.Logging;
+using System.Security.Authentication;
 
 namespace EBook.Service
 {
     public class Login : ILoginService
     {
-        private readonly JwtContext _context;
+        private readonly IServiceProvider _serviceProvider;
         private readonly JWTClaimsDetails _jwtDetails;
+        private readonly ILogger<Login> _logger;
 
-        public Login(JwtContext context, IOptions<JWTClaimsDetails> jwtDetails)
+        public Login(IServiceProvider serviceProvider, IOptions<JWTClaimsDetails> jwtDetails, ILogger<Login> logger)
         {
-            _context = context;
+            _serviceProvider = serviceProvider;
             _jwtDetails = jwtDetails.Value;
+            _logger = logger;
         }
+
 
         public async Task<string> SignupAsync(UserDTO loginService)
         {
@@ -43,13 +48,17 @@ namespace EBook.Service
             {
                 Username = loginService.Username,
                 Password = passwordHash,
-                Role = Roles.User
+                Role = Roles.User.ToString() 
             };
 
             try
             {
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                    context.Users.Add(user);
+                    await context.SaveChangesAsync();
+                }
                 return "Success";
             }
             catch (Exception ex)
@@ -63,14 +72,20 @@ namespace EBook.Service
         {
             try
             {
-                var user = await _context.Users.SingleOrDefaultAsync(u => u.Username == loginService.Username);
-                if (user == null || !BCrypt.Net.BCrypt.EnhancedVerify(loginService.Password, user.Password))
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    Console.WriteLine("Invalid username or password");
-                    return string.Empty;
-                }
+                    var context = scope.ServiceProvider.GetRequiredService<JwtContext>();
+                    var user = await context.Users.SingleOrDefaultAsync(u => u.Username == loginService.Username);
+                    if (user == null || !BCrypt.Net.BCrypt.EnhancedVerify(loginService.Password, user.Password))
+                    {
+                        Console.WriteLine("Invalid username or password");
+                        return string.Empty;
+                    }
 
-                return user.Role.ToString();
+                    string roleString = user.Role;
+
+                    return roleString;
+                }
             }
             catch (Exception ex)
             {
@@ -79,12 +94,15 @@ namespace EBook.Service
             }
         }
 
-        public string GenerateToken(UserDTO login, string role)
+
+        public async Task<string> GenerateToken(UserDTO login, string role)
         {
             try
             {
                 if (string.IsNullOrEmpty(role))
-                    throw new ArgumentException("Not a valid username or password");
+                {
+                    throw new AuthenticationException("Invalid username or password");
+                }
 
                 var secretKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtDetails.Key));
                 var signinCredentials = new SigningCredentials(secretKey, SecurityAlgorithms.HmacSha256);
@@ -99,17 +117,27 @@ namespace EBook.Service
                     issuer: _jwtDetails.Issuer,
                     audience: _jwtDetails.Audience,
                     claims: claims,
-                    expires: DateTime.Now.AddMinutes(8),
+                    expires: DateTime.Now.AddMinutes(13),
                     signingCredentials: signinCredentials
                 );
 
-                return new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
+                var token = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
+
+                _logger.LogInformation($"Generated Token for user '{login.Username}': {token}");
+
+                return token;
+            }
+            catch (AuthenticationException ex)
+            {
+                _logger.LogWarning($"Authentication error: {ex.Message}");
+                throw;
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
-                return ex.Message;
+                _logger.LogError($"Error during token generation: {ex.Message}");
+                throw new Exception("An error occurred during token generation");
             }
         }
+
     }
 }
